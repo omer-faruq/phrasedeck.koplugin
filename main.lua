@@ -233,6 +233,106 @@ function PhraseDeck:exportAllBooks()
     })
 end
 
+-- ── Markdown (Obsidian) export ──
+
+function PhraseDeck:exportBookMd(book_id)
+    local cards = PhraseDB.getCardsForExport(book_id)
+    if not cards or #cards == 0 then
+        UIManager:show(InfoMessage:new{
+            text = _("No cards to export."),
+            timeout = 3,
+        })
+        return
+    end
+
+    local title
+    if book_id then
+        title = PhraseDB.getBookTitle(book_id) or "unknown"
+    else
+        title = "all_books"
+    end
+
+    local folder = self:getExportFolder()
+    local filename = sanitizeFilename(title) .. ".md"
+    local filepath = ffiUtil.joinPath(folder, filename)
+
+    local file, err = io.open(filepath, "w")
+    if not file then
+        UIManager:show(InfoMessage:new{
+            text = string.format(_("Failed to write export file:\n%s"), err or ""),
+        })
+        return
+    end
+
+    file:write("# " .. title .. "\n\n")
+    for _, card in ipairs(cards) do
+        local phrase = card.phrase or ""
+        local sentence = card.sentence or ""
+        local note = card.user_note or ""
+        file:write("## " .. phrase .. "\n\n")
+        if note ~= "" then
+            file:write("- **Note:** " .. note .. "\n")
+        end
+        if sentence ~= "" then
+            file:write("- **Sentence:** " .. sentence .. "\n")
+        end
+        file:write("\n")
+    end
+    file:close()
+
+    UIManager:show(InfoMessage:new{
+        text = string.format(_("Exported %d cards to:\n%s"), #cards, filepath),
+    })
+end
+
+function PhraseDeck:exportAllBooksMd()
+    local books = PhraseDB.listBooks()
+    if not books or #books == 0 then
+        UIManager:show(InfoMessage:new{
+            text = _("No cards to export."),
+            timeout = 3,
+        })
+        return
+    end
+
+    local total = 0
+    local folder = self:getExportFolder()
+
+    for _, book in ipairs(books) do
+        if book.card_count and book.card_count > 0 then
+            local cards = PhraseDB.getCardsForExport(book.id)
+            if cards and #cards > 0 then
+                local btitle = book.title or "unknown"
+                local filename = sanitizeFilename(btitle) .. ".md"
+                local filepath = ffiUtil.joinPath(folder, filename)
+                local file = io.open(filepath, "w")
+                if file then
+                    file:write("# " .. btitle .. "\n\n")
+                    for _, card in ipairs(cards) do
+                        local phrase = card.phrase or ""
+                        local sentence = card.sentence or ""
+                        local note = card.user_note or ""
+                        file:write("## " .. phrase .. "\n\n")
+                        if note ~= "" then
+                            file:write("- **Note:** " .. note .. "\n")
+                        end
+                        if sentence ~= "" then
+                            file:write("- **Sentence:** " .. sentence .. "\n")
+                        end
+                        file:write("\n")
+                    end
+                    file:close()
+                    total = total + #cards
+                end
+            end
+        end
+    end
+
+    UIManager:show(InfoMessage:new{
+        text = string.format(_("Exported %d cards to:\n%s"), total, folder),
+    })
+end
+
 -- ── Highlight menu: Add to Deck ──
 
 function PhraseDeck:showAddToDeckDialog(selected_text_obj)
@@ -425,33 +525,60 @@ function PhraseDeck:addToMainMenu(menu_items)
                 end,
             },
             {
-                text = _("Export current book (TSV)"),
-                enabled_func = function()
-                    return self:getDocumentFilePath() ~= nil
-                end,
-                callback = function()
-                    local filepath = self:getDocumentFilePath()
-                    if not filepath then
-                        return
-                    end
-                    local book_id = PhraseDB.getOrCreateBook(self:getDocumentTitle(), filepath)
-                    if book_id then
-                        self:exportBook(book_id)
-                    end
-                end,
-            },
-            {
-                text = _("Export all books (TSV)"),
-                callback = function()
-                    self:exportAllBooks()
-                end,
-            },
-            {
-                text = _("Export folder"),
-                keep_menu_open = true,
-                callback = function()
-                    self:showExportFolderSetting()
-                end,
+                text = _("Export"),
+                sub_item_table = {
+                    {
+                        text = _("Current book (TSV)"),
+                        enabled_func = function()
+                            return self:getDocumentFilePath() ~= nil
+                        end,
+                        callback = function()
+                            local filepath = self:getDocumentFilePath()
+                            if not filepath then
+                                return
+                            end
+                            local book_id = PhraseDB.getOrCreateBook(self:getDocumentTitle(), filepath)
+                            if book_id then
+                                self:exportBook(book_id)
+                            end
+                        end,
+                    },
+                    {
+                        text = _("All books (TSV)"),
+                        callback = function()
+                            self:exportAllBooks()
+                        end,
+                    },
+                    {
+                        text = _("Current book (Markdown)"),
+                        enabled_func = function()
+                            return self:getDocumentFilePath() ~= nil
+                        end,
+                        callback = function()
+                            local filepath = self:getDocumentFilePath()
+                            if not filepath then
+                                return
+                            end
+                            local book_id = PhraseDB.getOrCreateBook(self:getDocumentTitle(), filepath)
+                            if book_id then
+                                self:exportBookMd(book_id)
+                            end
+                        end,
+                    },
+                    {
+                        text = _("All books (Markdown)"),
+                        callback = function()
+                            self:exportAllBooksMd()
+                        end,
+                    },
+                    {
+                        text = _("Export folder"),
+                        keep_menu_open = true,
+                        callback = function()
+                            self:showExportFolderSetting()
+                        end,
+                    },
+                },
             },
         },
     }
