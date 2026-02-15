@@ -14,7 +14,8 @@ Collect phrases from your books and study them with spaced repetition flashcards
 - **Daily New Card Limit** – Control how many new cards you see per day.
 - **Randomize Cards** – Optionally randomize cards that share the same due date.
 - **TSV Export** – Export cards to TSV files (phrase, sentence, note) for use on a PC or import into Anki.
-- **Configurable Export Folder** – Choose where exported TSV files are saved.
+- **Markdown Export** – Export cards as `.md` files, compatible with Obsidian and other Markdown-based note apps.
+- **Configurable Export Folder** – Choose where exported files are saved.
 
 ## How to Use
 
@@ -36,8 +37,11 @@ Collect phrases from your books and study them with spaced repetition flashcards
 ### Exporting Cards
 
 1. Open the main menu → **PhraseDeck** → **Export**.
-2. Choose a specific book or export all books.
-3. TSV files are saved to the configured export folder.
+2. Choose a format:
+   - **TSV** – Tab-separated values, ideal for Anki import or spreadsheet use.
+   - **Markdown** – One `.md` file per book, ideal for Obsidian or any Markdown viewer.
+3. Export the current book or all books at once.
+4. Files are saved to the configured export folder.
 
 ## File Structure
 
