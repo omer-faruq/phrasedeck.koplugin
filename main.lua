@@ -351,10 +351,13 @@ function PhraseDeck:showAddToDeckDialog(selected_text_obj)
     -- Extract sentence context
     local sentence = phrase
     local has_context = false
-    if self.ui and self.ui.document and not self.ui.document.info.has_pages
+    local nb_words = tonumber(self:readSetting("context_words", 50)) or 50
+    if nb_words == 0 then
+        sentence = phrase
+        has_context = false
+    elseif self.ui and self.ui.document and not self.ui.document.info.has_pages
        and selected_text_obj.pos0 and selected_text_obj.pos1
        and self.ui.document.getSelectedWordContext then
-        local nb_words = tonumber(self:readSetting("context_words", 50)) or 50
         local ok, prev_ctx, next_ctx = pcall(
             self.ui.document.getSelectedWordContext,
             self.ui.document,
@@ -368,95 +371,106 @@ function PhraseDeck:showAddToDeckDialog(selected_text_obj)
         end
     end
 
-    -- Show multi-input dialog: editable phrase + note, sentence as read-only description
-    local multi_dialog
-    local description_text
-    if has_context then
-        description_text = _("Sentence: ") .. sentence
-    else
-        description_text = nil
+    -- Show phrase input dialog, then note dialog
+    local function showNoteDialog(final_phrase)
+        local InputDialog = require("ui/widget/inputdialog")
+        local note_dialog
+        local description_text = has_context and (_("Sentence: ") .. sentence) or nil
+        note_dialog = InputDialog:new{
+            title = _("Add Note / Meaning"),
+            description = description_text,
+            input = "",
+            input_hint = _("Enter your note / meaning..."),
+            buttons = {
+                {
+                    {
+                        text = _("Cancel"),
+                        id = "close",
+                        callback = function()
+                            UIManager:close(note_dialog)
+                        end,
+                    },
+                    {
+                        text = _("Save"),
+                        is_enter_default = true,
+                        callback = function()
+                            local user_note = note_dialog:getInputText()
+                            UIManager:close(note_dialog)
+                            
+                            -- Save to database
+                            local filepath = self:getDocumentFilePath()
+                            local title = self:getDocumentTitle()
+                            if not filepath then
+                                UIManager:show(InfoMessage:new{
+                                    text = _("Could not determine document path."),
+                                    timeout = 3,
+                                })
+                                return
+                            end
+
+                            local book_id = PhraseDB.getOrCreateBook(title, filepath)
+                            if not book_id then
+                                UIManager:show(InfoMessage:new{
+                                    text = _("Failed to create book record."),
+                                    timeout = 3,
+                                })
+                                return
+                            end
+
+                            local card_id = PhraseDB.addCard(book_id, final_phrase, sentence, user_note)
+                            if card_id then
+                                UIManager:show(Notification:new{
+                                    text = _("Phrase added to deck!"),
+                                })
+                            else
+                                UIManager:show(InfoMessage:new{
+                                    text = _("Failed to save card."),
+                                    timeout = 3,
+                                })
+                            end
+                        end,
+                    },
+                },
+            },
+        }
+        UIManager:show(note_dialog)
+        note_dialog:onShowKeyboard()
     end
 
-    local fields = {
-        {
-            description = _("Phrase"),
-            text = phrase,
-            hint = _("Selected phrase"),
-        },
-        {
-            description = _("Note / Meaning"),
-            text = "",
-            hint = _("Enter your note / meaning..."),
-        },
-    }
-
-    local MultiInputDialog = require("ui/widget/multiinputdialog")
-    multi_dialog = MultiInputDialog:new{
+    -- First dialog: edit phrase
+    local InputDialog = require("ui/widget/inputdialog")
+    local phrase_dialog
+    phrase_dialog = InputDialog:new{
         title = _("Add to PhraseDeck"),
-        description = description_text,
-        fields = fields,
+        description = _("Edit phrase if needed:"),
+        input = phrase,
+        input_hint = _("Selected phrase"),
         buttons = {
             {
                 {
                     text = _("Cancel"),
                     id = "close",
                     callback = function()
-                        UIManager:close(multi_dialog)
-                        UIManager:setDirty("all", "partial")
+                        UIManager:close(phrase_dialog)
                     end,
                 },
                 {
-                    text = _("Save"),
+                    text = _("Next"),
                     is_enter_default = true,
                     callback = function()
-                        local input_fields = multi_dialog:getFields()
-                        local final_phrase = input_fields[1] or phrase
-                        local user_note = input_fields[2] or ""
-                        UIManager:close(multi_dialog)
-                        UIManager:setDirty("all", "partial")
-
+                        local final_phrase = phrase_dialog:getInputText()
                         if final_phrase == "" then
                             final_phrase = phrase
                         end
-
-                        -- Save to database
-                        local filepath = self:getDocumentFilePath()
-                        local title = self:getDocumentTitle()
-                        if not filepath then
-                            UIManager:show(InfoMessage:new{
-                                text = _("Could not determine document path."),
-                                timeout = 3,
-                            })
-                            return
-                        end
-
-                        local book_id = PhraseDB.getOrCreateBook(title, filepath)
-                        if not book_id then
-                            UIManager:show(InfoMessage:new{
-                                text = _("Failed to create book record."),
-                                timeout = 3,
-                            })
-                            return
-                        end
-
-                        local card_id = PhraseDB.addCard(book_id, final_phrase, sentence, user_note)
-                        if card_id then
-                            UIManager:show(Notification:new{
-                                text = _("Phrase added to deck!"),
-                            })
-                        else
-                            UIManager:show(InfoMessage:new{
-                                text = _("Failed to save card."),
-                                timeout = 3,
-                            })
-                        end
+                        UIManager:close(phrase_dialog)
+                        showNoteDialog(final_phrase)
                     end,
                 },
             },
         },
     }
-    UIManager:show(multi_dialog)
-    multi_dialog:onShowKeyboard()
+    UIManager:show(phrase_dialog)
+    phrase_dialog:onShowKeyboard()
 end
 
 -- ── Plugin lifecycle ──

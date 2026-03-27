@@ -5,6 +5,7 @@ local Device = require("device")
 local Font = require("ui/font")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
+local GestureRange = require("ui/gesturerange")
 local Size = require("ui/size")
 local TextWidget = require("ui/widget/textwidget")
 local TextBoxWidget = require("ui/widget/textboxwidget")
@@ -19,6 +20,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local ConfirmBox = require("ui/widget/confirmbox")
 local Menu = require("ui/widget/menu")
 local InputDialog = require("ui/widget/inputdialog")
+local ScrollTextWidget = require("ui/widget/scrolltextwidget")
 local _ = require("gettext")
 local logger = require("logger")
 local PhraseDB = require("phrasedeck_db")
@@ -54,8 +56,24 @@ function StudyScreen:init()
     self.current_card = nil
     self.showing_back = false
 
-    local card_width = math.floor(Screen:getWidth() * 0.85)
-    local card_height = Size.item.height_large * 10
+    local fullscreen_mode = false
+    if self.plugin then
+        fullscreen_mode = not not self.plugin:readSetting("fullscreen_mode", false)
+    end
+    self.fullscreen_mode = fullscreen_mode
+
+    local card_width, card_height
+    local top_bottom_spacing
+    if fullscreen_mode then
+        card_width = math.floor(Screen:getWidth() * 0.95)
+        top_bottom_spacing = Size.padding.small
+        card_height = Screen:getHeight() - Size.item.height_large * 3.5 - (top_bottom_spacing * 2)
+    else
+        card_width = math.floor(Screen:getWidth() * 0.85)
+        card_height = Size.item.height_large * 10
+        top_bottom_spacing = VERTICAL_SPAN_SMALL
+    end
+    self.fullscreen_top_bottom_spacing = top_bottom_spacing
 
     local title_max_width = math.floor(Screen:getWidth() * 0.9)
     local title_face = Font:getFace("cfont", 26)
@@ -81,6 +99,7 @@ function StudyScreen:init()
         alignment = "center",
         height_overflow_show_ellipsis = true,
     }
+    self.card_full_text = ""
 
     self.status_widget = TextWidget:new{
         face = Font:getFace("smallinfofont"),
@@ -88,10 +107,27 @@ function StudyScreen:init()
     }
 
     -- Card container
-    self.card_container = CenterContainer:new{
+    self.card_container = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = card_width, h = card_height },
-        self.card_widget,
+        CenterContainer:new{
+            dimen = Geom:new{ x = 0, y = 0, w = card_width, h = card_height },
+            self.card_widget,
+        },
     }
+    if Device:isTouchDevice() then
+        self.card_container.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = self.card_container.dimen,
+                },
+            },
+        }
+        self.card_container.onTap = function()
+            self:showFullText()
+            return true
+        end
+    end
 
     -- Card frame
     self.card_frame = FrameContainer:new{
@@ -197,6 +233,11 @@ function StudyScreen:init()
 
     -- Rating buttons
     local btn_width = math.floor(Screen:getWidth() * 0.18)
+    self.delete_button = Button:new{
+        text = _("Delete"),
+        callback = function() self:onDeleteCard() end,
+        width = btn_width, bordersize = 0, margin = 0, radius = 0,
+    }
     self.again_button = Button:new{
         text = _("Again"),
         callback = function() self:onRate("again") end,
@@ -218,6 +259,12 @@ function StudyScreen:init()
         width = btn_width, bordersize = 0, margin = 0, radius = 0,
     }
 
+    local col_delete = VerticalGroup:new{
+        align = "center",
+        TextWidget:new{ face = small_interval_face, text = "" },
+        VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
+        self.delete_button,
+    }
     local col_again = VerticalGroup:new{
         align = "center",
         self.interval_again,
@@ -252,30 +299,32 @@ function StudyScreen:init()
         col_good,
         HorizontalSpan:new{ width = Size.span.horizontal_small },
         col_easy,
+        HorizontalSpan:new{ width = Size.span.horizontal_small },
+        col_delete,
     }
 
     -- Front layout (phrase only + show answer)
     self.front_layout = VerticalGroup:new{
         align = "center",
-        VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
+        VerticalSpan:new{ width = self.fullscreen_top_bottom_spacing },
         top_bar,
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.card_frame,
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         show_row,
-        VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
+        VerticalSpan:new{ width = self.fullscreen_top_bottom_spacing },
     }
 
     -- Back layout (full card + ratings)
     self.back_layout = VerticalGroup:new{
         align = "center",
-        VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
+        VerticalSpan:new{ width = self.fullscreen_top_bottom_spacing },
         top_bar,
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.card_frame,
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         rating_row,
-        VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
+        VerticalSpan:new{ width = self.fullscreen_top_bottom_spacing },
     }
 
     self.active_layout = self.front_layout
@@ -292,6 +341,7 @@ end
 
 function StudyScreen:setRatingButtonsEnabled(enabled)
     local flag = not not enabled
+    if self.delete_button then self.delete_button:enableDisable(flag) end
     if self.again_button then self.again_button:enableDisable(flag) end
     if self.hard_button then self.hard_button:enableDisable(flag) end
     if self.good_button then self.good_button:enableDisable(flag) end
@@ -350,7 +400,9 @@ function StudyScreen:loadNextCard()
     self.current_card = card
     self.showing_back = false
     -- Front side: show only the phrase
-    self.card_widget:setText(card.phrase)
+    local phrase_text = card.phrase
+    self.card_full_text = phrase_text
+    self.card_widget:setText(phrase_text)
     self:setShowButtonVisible(true)
     self:setRatingButtonsEnabled(false)
     self.active_layout = self.front_layout
@@ -382,8 +434,14 @@ function StudyScreen:onShowOrNext()
     end
     if not self.showing_back then
         self.showing_back = true
-        self.card_widget:setText(self:buildBackText(self.current_card))
-        local previews = PhraseDB.previewIntervals(self.current_card)
+        local back_text = self:buildBackText(self.current_card)
+        self.card_full_text = back_text
+        self.card_widget:setText(back_text)
+        local min_interval = 0
+        if self.plugin then
+            min_interval = tonumber(self.plugin:readSetting("min_interval_days", 0)) or 0
+        end
+        local previews = PhraseDB.previewIntervals(self.current_card, nil, min_interval)
         self:updateRatingLabels(previews)
         self:setShowButtonVisible(false)
         self:setRatingButtonsEnabled(true)
@@ -393,12 +451,44 @@ function StudyScreen:onShowOrNext()
     end
 end
 
+function StudyScreen:showFullText()
+    if not self.card_full_text or self.card_full_text == "" then
+        return
+    end
+    local TextViewer = require("ui/widget/textviewer")
+    local text_viewer = TextViewer:new{
+        title = _("Full Text"),
+        text = self.card_full_text,
+    }
+    UIManager:show(text_viewer)
+end
+
+function StudyScreen:onDeleteCard()
+    if not self.current_card then
+        return
+    end
+    UIManager:show(ConfirmBox:new{
+        text = _("Delete this card?"),
+        ok_text = _("Delete"),
+        ok_callback = function()
+            PhraseDB.deleteCard(self.current_card.id)
+            self.current_card = nil
+            self.showing_back = false
+            self:loadNextCard()
+        end,
+    })
+end
+
 function StudyScreen:onRate(rating)
     if not self.current_card then
         return
     end
     local is_new_card = (self.current_card.reps == 0 and self.current_card.interval == 0)
-    local updated = PhraseDB.updateCardScheduling(self.current_card, rating)
+    local min_interval = 0
+    if self.plugin then
+        min_interval = tonumber(self.plugin:readSetting("min_interval_days", 0)) or 0
+    end
+    local updated = PhraseDB.updateCardScheduling(self.current_card, rating, nil, min_interval)
     if is_new_card and self.book_id then
         PhraseDB.incrementDailyNewCardsCount(self.book_id)
     end
@@ -602,7 +692,7 @@ function StudyScreen:showSettingsMenu()
                     title = _("Context words count"),
                     input = tostring(current),
                     input_type = "number",
-                    description = _("Number of words to capture around selected phrase for sentence extraction."),
+                    description = _("Number of words to capture around selected phrase for sentence extraction. 0 = sentence equals phrase."),
                     buttons = {
                         {
                             {
@@ -616,7 +706,7 @@ function StudyScreen:showSettingsMenu()
                                 is_enter_default = true,
                                 callback = function()
                                     local val = tonumber(input_dialog:getInputText()) or 50
-                                    if val < 10 then val = 10 end
+                                    if val < 0 then val = 0 end
                                     study.plugin:saveSetting("context_words", val)
                                     UIManager:close(input_dialog)
                                     if menu and menu.updateItems then
@@ -629,6 +719,76 @@ function StudyScreen:showSettingsMenu()
                 }
                 UIManager:show(input_dialog)
                 input_dialog:onShowKeyboard()
+            end,
+        },
+        {
+            text = _("Minimum interval (days)"),
+            keep_menu_open = true,
+            mandatory_func = function()
+                if not study.plugin then return "Default" end
+                local val = tonumber(study.plugin:readSetting("min_interval_days", 0)) or 0
+                if val == 0 then return _("Default") end
+                return tostring(val) .. "d"
+            end,
+            callback = function()
+                if not study.plugin then return end
+                local options = {
+                    {text = _("Default (Anki-style)"), value = 0},
+                    {text = "1d", value = 1},
+                    {text = "3d", value = 3},
+                    {text = "7d", value = 7},
+                    {text = "14d", value = 14},
+                }
+                local buttons = {}
+                for i, opt in ipairs(options) do
+                    table.insert(buttons, {
+                        {
+                            text = opt.text,
+                            callback = function()
+                                study.plugin:saveSetting("min_interval_days", opt.value)
+                                UIManager:show(InfoMessage:new{
+                                    text = _("Minimum interval updated."),
+                                    timeout = 2,
+                                })
+                                if menu and menu.updateItems then
+                                    menu:updateItems(4, true)
+                                end
+                            end,
+                        },
+                    })
+                end
+                local ButtonDialog = require("ui/widget/buttondialog")
+                UIManager:show(ButtonDialog:new{
+                    title = _("Select minimum interval for rating buttons"),
+                    buttons = buttons,
+                })
+            end,
+        },
+        {
+            text = _("Fullscreen mode"),
+            keep_menu_open = true,
+            mandatory_func = function()
+                if not study.plugin then return "OFF" end
+                if study.plugin:readSetting("fullscreen_mode", false) then
+                    return "ON"
+                end
+                return "OFF"
+            end,
+            checked_func = function()
+                if not study.plugin then return false end
+                return not not study.plugin:readSetting("fullscreen_mode", false)
+            end,
+            callback = function()
+                if not study.plugin then return end
+                local current = not not study.plugin:readSetting("fullscreen_mode", false)
+                study.plugin:saveSetting("fullscreen_mode", not current)
+                UIManager:show(InfoMessage:new{
+                    text = _("Fullscreen mode will apply on next study session."),
+                    timeout = 3,
+                })
+                if menu and menu.updateItems then
+                    menu:updateItems(5, true)
+                end
             end,
         },
         {
