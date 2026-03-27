@@ -5,10 +5,14 @@ Collect phrases from your books and study them with spaced repetition flashcards
 ## Features
 
 - **Highlight to Collect** – Select any text while reading, tap "Add to Deck" from the highlight menu, and save it as a flashcard.
-- **Automatic Sentence Extraction** – The surrounding sentence is automatically captured as context (EPUB/HTML documents).
-- **Editable Phrase** – Edit the selected phrase before saving. The sentence context remains read-only.
+- **Automatic Sentence Extraction** – The surrounding sentence is automatically captured as context (EPUB/HTML documents). Context words can be set to 0 to use the phrase itself as the sentence.
+- **Editable Phrase** – Edit the selected phrase before saving. Long text selections are handled with scrollable input fields.
 - **Personal Notes** – Add your own note or meaning to each card.
 - **Spaced Repetition (SM-2)** – Study your cards with a built-in flashcard screen using the SM-2 scheduling algorithm (Again / Hard / Good / Easy).
+- **Minimum Interval Setting** – Set a minimum interval (1d, 3d, 7d, 14d) for spaced repetition to prevent cards from being reviewed too frequently.
+- **Delete Cards** – Delete individual cards directly from the study screen with a confirmation dialog.
+- **Fullscreen Study Mode** – Toggle fullscreen mode to maximize card display area while studying.
+- **Tap to View Full Text** – Tap on card content to view the complete text in a scrollable popup (useful for long phrases or notes).
 - **Per-Book Decks** – Browse and study cards from a specific book or from all books at once.
 - **Book Management** – Long-press a book in the study screen's book list to delete it and all its cards.
 - **Daily New Card Limit** – Control how many new cards you see per day.
