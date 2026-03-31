@@ -259,36 +259,121 @@ function StudyScreen:init()
         width = btn_width, bordersize = 0, margin = 0, radius = 0,
     }
 
-    local col_delete = VerticalGroup:new{
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local col_delete_inner = VerticalGroup:new{
         align = "center",
-        TextWidget:new{ face = small_interval_face, text = "" },
+        CenterContainer:new{
+            dimen = Geom:new{ w = btn_width, h = small_interval_face.size },
+            TextWidget:new{ face = small_interval_face, text = "" },
+        },
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.delete_button,
     }
-    local col_again = VerticalGroup:new{
+    local col_delete = InputContainer:new{
+        col_delete_inner,
+        dimen = Geom:new{ w = btn_width, h = col_delete_inner:getSize().h },
+    }
+    col_delete.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = function() return col_delete.dimen end,
+            },
+        },
+    }
+    col_delete.onTap = function() self:onDeleteCard() end
+
+    local col_again_inner = VerticalGroup:new{
         align = "center",
-        self.interval_again,
+        CenterContainer:new{
+            dimen = Geom:new{ w = btn_width, h = small_interval_face.size },
+            self.interval_again,
+        },
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.again_button,
     }
-    local col_hard = VerticalGroup:new{
+    local col_again = InputContainer:new{
+        col_again_inner,
+        dimen = Geom:new{ w = btn_width, h = col_again_inner:getSize().h },
+    }
+    col_again.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = function() return col_again.dimen end,
+            },
+        },
+    }
+    col_again.onTap = function() self:onRate("again") end
+
+    local col_hard_inner = VerticalGroup:new{
         align = "center",
-        self.interval_hard,
+        CenterContainer:new{
+            dimen = Geom:new{ w = btn_width, h = small_interval_face.size },
+            self.interval_hard,
+        },
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.hard_button,
     }
-    local col_good = VerticalGroup:new{
+    local col_hard = InputContainer:new{
+        col_hard_inner,
+        dimen = Geom:new{ w = btn_width, h = col_hard_inner:getSize().h },
+    }
+    col_hard.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = function() return col_hard.dimen end,
+            },
+        },
+    }
+    col_hard.onTap = function() self:onRate("hard") end
+
+    local col_good_inner = VerticalGroup:new{
         align = "center",
-        self.interval_good,
+        CenterContainer:new{
+            dimen = Geom:new{ w = btn_width, h = small_interval_face.size },
+            self.interval_good,
+        },
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.good_button,
     }
-    local col_easy = VerticalGroup:new{
+    local col_good = InputContainer:new{
+        col_good_inner,
+        dimen = Geom:new{ w = btn_width, h = col_good_inner:getSize().h },
+    }
+    col_good.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = function() return col_good.dimen end,
+            },
+        },
+    }
+    col_good.onTap = function() self:onRate("good") end
+
+    local col_easy_inner = VerticalGroup:new{
         align = "center",
-        self.interval_easy,
+        CenterContainer:new{
+            dimen = Geom:new{ w = btn_width, h = small_interval_face.size },
+            self.interval_easy,
+        },
         VerticalSpan:new{ width = VERTICAL_SPAN_SMALL },
         self.easy_button,
     }
+    local col_easy = InputContainer:new{
+        col_easy_inner,
+        dimen = Geom:new{ w = btn_width, h = col_easy_inner:getSize().h },
+    }
+    col_easy.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = function() return col_easy.dimen end,
+            },
+        },
+    }
+    col_easy.onTap = function() self:onRate("easy") end
 
     local rating_row = HorizontalGroup:new{
         align = "center",
