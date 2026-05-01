@@ -523,10 +523,14 @@ function StudyScreen:onShowOrNext()
         self.card_full_text = back_text
         self.card_widget:setText(back_text)
         local min_interval = 0
+        local max_interval = 365
+        local algorithm_type = "scheduled"
         if self.plugin then
             min_interval = tonumber(self.plugin:readSetting("min_interval_days", 0)) or 0
+            max_interval = tonumber(self.plugin:readSetting("max_interval_days", 365)) or 365
+            algorithm_type = self.plugin:readSetting("algorithm_type", "scheduled") or "scheduled"
         end
-        local previews = PhraseDB.previewIntervals(self.current_card, nil, min_interval)
+        local previews = PhraseDB.previewIntervals(self.current_card, nil, min_interval, max_interval, algorithm_type)
         self:updateRatingLabels(previews)
         self:setShowButtonVisible(false)
         self:setRatingButtonsEnabled(true)
@@ -570,10 +574,14 @@ function StudyScreen:onRate(rating)
     end
     local is_new_card = (self.current_card.reps == 0 and self.current_card.interval == 0)
     local min_interval = 0
+    local max_interval = 365
+    local algorithm_type = "scheduled"
     if self.plugin then
         min_interval = tonumber(self.plugin:readSetting("min_interval_days", 0)) or 0
+        max_interval = tonumber(self.plugin:readSetting("max_interval_days", 365)) or 365
+        algorithm_type = self.plugin:readSetting("algorithm_type", "scheduled") or "scheduled"
     end
-    local updated = PhraseDB.updateCardScheduling(self.current_card, rating, nil, min_interval)
+    local updated = PhraseDB.updateCardScheduling(self.current_card, rating, nil, min_interval, max_interval, algorithm_type)
     if is_new_card and self.book_id then
         PhraseDB.incrementDailyNewCardsCount(self.book_id)
     end
@@ -807,6 +815,57 @@ function StudyScreen:showSettingsMenu()
             end,
         },
         {
+            text = _("Algorithm type"),
+            keep_menu_open = true,
+            mandatory_func = function()
+                if not study.plugin then return "Scheduled" end
+                local algo = study.plugin:readSetting("algorithm_type", "scheduled")
+                if algo == "adaptive" then
+                    return _("Adaptive")
+                else
+                    return _("Scheduled")
+                end
+            end,
+            sub_item_table = {
+                {
+                    text = _("Scheduled (Classic SM-2)"),
+                    checked_func = function()
+                        if not study.plugin then return true end
+                        return study.plugin:readSetting("algorithm_type", "scheduled") == "scheduled"
+                    end,
+                    callback = function()
+                        if not study.plugin then return end
+                        study.plugin:saveSetting("algorithm_type", "scheduled")
+                        UIManager:show(InfoMessage:new{
+                            text = _("Algorithm type updated."),
+                            timeout = 2,
+                        })
+                        if menu and menu.updateItems then
+                            menu:updateItems(4, true)
+                        end
+                    end,
+                },
+                {
+                    text = _("Adaptive (Time-Based)"),
+                    checked_func = function()
+                        if not study.plugin then return false end
+                        return study.plugin:readSetting("algorithm_type", "scheduled") == "adaptive"
+                    end,
+                    callback = function()
+                        if not study.plugin then return end
+                        study.plugin:saveSetting("algorithm_type", "adaptive")
+                        UIManager:show(InfoMessage:new{
+                            text = _("Algorithm type updated."),
+                            timeout = 2,
+                        })
+                        if menu and menu.updateItems then
+                            menu:updateItems(4, true)
+                        end
+                    end,
+                },
+            },
+        },
+        {
             text = _("Minimum interval (days)"),
             keep_menu_open = true,
             mandatory_func = function()
@@ -836,7 +895,7 @@ function StudyScreen:showSettingsMenu()
                                     timeout = 2,
                                 })
                                 if menu and menu.updateItems then
-                                    menu:updateItems(4, true)
+                                    menu:updateItems(5, true)
                                 end
                             end,
                         },
@@ -845,6 +904,48 @@ function StudyScreen:showSettingsMenu()
                 local ButtonDialog = require("ui/widget/buttondialog")
                 UIManager:show(ButtonDialog:new{
                     title = _("Select minimum interval for rating buttons"),
+                    buttons = buttons,
+                })
+            end,
+        },
+        {
+            text = _("Maximum interval (days)"),
+            keep_menu_open = true,
+            mandatory_func = function()
+                if not study.plugin then return "365d" end
+                local val = tonumber(study.plugin:readSetting("max_interval_days", 365)) or 365
+                return tostring(val) .. "d"
+            end,
+            callback = function()
+                if not study.plugin then return end
+                local options = {
+                    {text = "30d", value = 30},
+                    {text = "90d", value = 90},
+                    {text = "180d", value = 180},
+                    {text = "365d", value = 365},
+                    {text = "730d (2 years)", value = 730},
+                }
+                local buttons = {}
+                for i, opt in ipairs(options) do
+                    table.insert(buttons, {
+                        {
+                            text = opt.text,
+                            callback = function()
+                                study.plugin:saveSetting("max_interval_days", opt.value)
+                                UIManager:show(InfoMessage:new{
+                                    text = _("Maximum interval updated."),
+                                    timeout = 2,
+                                })
+                                if menu and menu.updateItems then
+                                    menu:updateItems(6, true)
+                                end
+                            end,
+                        },
+                    })
+                end
+                local ButtonDialog = require("ui/widget/buttondialog")
+                UIManager:show(ButtonDialog:new{
+                    title = _("Select maximum interval"),
                     buttons = buttons,
                 })
             end,
@@ -872,7 +973,7 @@ function StudyScreen:showSettingsMenu()
                     timeout = 3,
                 })
                 if menu and menu.updateItems then
-                    menu:updateItems(5, true)
+                    menu:updateItems(7, true)
                 end
             end,
         },
